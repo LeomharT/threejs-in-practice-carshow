@@ -4,9 +4,9 @@ import {
 	Color,
 	CubeCamera,
 	Group,
+	LinearFilter,
 	Mesh,
 	MeshStandardMaterial,
-	NearestFilter,
 	PCFSoftShadowMap,
 	PerspectiveCamera,
 	PlaneGeometry,
@@ -40,6 +40,7 @@ export default function App() {
 		});
 		renderer.shadowMap.enabled = true;
 		renderer.shadowMap.type = PCFSoftShadowMap;
+		await renderer.init();
 		renderer.setSize(window.innerWidth, window.innerHeight);
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		renderer.setClearColor(0x000000);
@@ -64,13 +65,12 @@ export default function App() {
 		const stats = new Stats();
 		el.append(stats.dom);
 
-		const cubeEnvironment = new WebGLCubeRenderTarget(512, {
+		const cubeEnvironment = new WebGLCubeRenderTarget(256, {
 			generateMipmaps: true,
-			magFilter: NearestFilter,
-			minFilter: NearestFilter,
+			minFilter: LinearFilter,
+			magFilter: LinearFilter,
 		});
-		const cubeCamera = new CubeCamera(0.1, 1000, cubeEnvironment);
-		cubeCamera.position.set(0, 0, 0);
+		const cubeCamera = new CubeCamera(0.5, 500, cubeEnvironment);
 		cubeCamera.layers.set(ENVIRONMENT_LAYER);
 		scene.add(cubeCamera);
 
@@ -147,6 +147,7 @@ export default function App() {
 		const ringsGap = 3.5;
 
 		const rings = new Group();
+		rings.layers.enable(ENVIRONMENT_LAYER);
 
 		const ringsGeometry = new TorusGeometry(3.35, 0.05, 10, 100);
 		const ringsMaterial = new MeshStandardMaterial({
@@ -259,7 +260,7 @@ export default function App() {
 			controls.update(time);
 			stats.update();
 
-			cubeCamera.update(renderer as any, scene);
+			cubeCamera.update(renderer, scene);
 
 			renderer.render(scene, camera);
 		}
