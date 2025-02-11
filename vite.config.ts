@@ -5,4 +5,5 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [react({ include: /\.(jsx|js|mdx|md|tsx|ts)$/ })],
 	server: { hmr: false },
+	base: './',
 });

@@ -79,10 +79,10 @@ export default function App() {
 		 */
 
 		const textureLoader = new TextureLoader();
-		textureLoader.setPath('/assets/textures/');
+		textureLoader.setPath('/src/assets/textures/');
 
 		const gltfLoader = new GLTFLoader();
-		gltfLoader.setPath('/assets/modules/');
+		gltfLoader.setPath('/src/assets/modules/');
 
 		/**
 		 * Textures
