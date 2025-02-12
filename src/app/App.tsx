@@ -212,6 +212,19 @@ export default function App() {
 			return v;
 		}
 
+		function resetBoxPosition() {
+			const v = new Vector3(
+				Math.random() * 2 - 1,
+				Math.random() * 2.5 + 0.1,
+				Math.random() * 10 + 10
+			);
+
+			if (v.x < 0) v.x -= 1.75;
+			if (v.x > 0) v.x += 1.75;
+
+			return v;
+		}
+
 		for (let i = 0; i < boxesCount; i++) {
 			const box = new Mesh(boxGeometry, boxMaterial.clone());
 
@@ -347,23 +360,32 @@ export default function App() {
 		}
 
 		function updateBoxes(time: number) {
-			time *= 0.001;
-
 			for (let i = 0; i < boxesCount; i++) {
 				const box = boxes.children[i];
 
-				box.rotation.x = time * box.userData.speed;
-				box.rotation.y = time * box.userData.speed;
+				box.rotation.x += time * box.userData.speed;
+				box.rotation.y += time * box.userData.speed;
+
+				box.position.z -= time * 1.2;
+
+				if (box.position.z < -10) {
+					box.position.copy(resetBoxPosition());
+				}
 			}
 		}
+
+		let lastTime = 0;
 
 		function render(time: number = 0) {
 			requestAnimationFrame(render);
 
+			const deltaTime = (time - lastTime) * 0.001;
+			lastTime = time;
+
 			controls.update(time);
 			stats.update();
 			updateRings(time);
-			updateBoxes(time);
+			updateBoxes(deltaTime);
 
 			girdColorTexture.offset.y = -time * 0.001 * 0.68;
 			floorRoughnessTexture.offset.y = -time * 0.001 * 0.128;
