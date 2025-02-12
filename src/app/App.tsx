@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import {
 	AxesHelper,
+	BoxGeometry,
 	Color,
 	CubeCamera,
 	Group,
 	LinearFilter,
 	Mesh,
+	MeshBasicMaterial,
 	MeshStandardMaterial,
 	PCFSoftShadowMap,
 	PerspectiveCamera,
@@ -13,8 +15,10 @@ import {
 	RepeatWrapping,
 	Scene,
 	SpotLight,
+	SRGBColorSpace,
 	TextureLoader,
 	TorusGeometry,
+	Vector3,
 	WebGLCubeRenderTarget,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -24,6 +28,9 @@ import { reflector, texture, uv } from 'three/src/nodes/TSL';
 import { MeshStandardNodeMaterial, WebGPURenderer } from 'three/webgpu';
 import { Pane } from 'tweakpane';
 
+const PUBLIC_PATH = import.meta.env.PROD
+	? import.meta.env.VITE_ASSETS_PATH_PRO
+	: import.meta.env.VITE_ASSETS_PATH_DEV;
 const ENVIRONMENT_LAYER = 1;
 
 export default function App() {
@@ -79,10 +86,10 @@ export default function App() {
 		 */
 
 		const textureLoader = new TextureLoader();
-		textureLoader.setPath('/assets/textures/');
+		textureLoader.setPath(PUBLIC_PATH + 'assets/textures/');
 
 		const gltfLoader = new GLTFLoader();
-		gltfLoader.setPath('/assets/modules/');
+		gltfLoader.setPath(PUBLIC_PATH + 'assets/modules/');
 
 		/**
 		 * Textures
@@ -95,6 +102,12 @@ export default function App() {
 		const floorRoughnessTexture = textureLoader.load('terrain-roughness.jpg');
 		floorRoughnessTexture.wrapS = floorRoughnessTexture.wrapT = RepeatWrapping;
 		floorRoughnessTexture.repeat.set(5, 5);
+
+		const girdColorTexture = textureLoader.load('grid-texture.png');
+		girdColorTexture.wrapS = girdColorTexture.wrapT = RepeatWrapping;
+		girdColorTexture.repeat.set(15, 15);
+		girdColorTexture.anisotropy = 16;
+		girdColorTexture.colorSpace = SRGBColorSpace;
 
 		/**
 		 * Scene
@@ -123,6 +136,17 @@ export default function App() {
 		floor.add(floorReflector.target);
 		scene.add(floor);
 
+		const gridGeometry = new PlaneGeometry(30, 30, 32, 32);
+		const gridMaterial = new MeshBasicMaterial({
+			transparent: true,
+			map: girdColorTexture,
+			opacity: 0.05,
+		});
+		const grid = new Mesh(gridGeometry, gridMaterial);
+		grid.rotation.x = -Math.PI / 2;
+		grid.position.y = 0.002;
+		scene.add(grid);
+
 		gltfLoader.load('chevrolet_corvette_c7/scene.gltf', (data) => {
 			const car = data.scene;
 			car.scale.setScalar(0.005);
@@ -138,7 +162,7 @@ export default function App() {
 				}
 			});
 
-			scene.add(car);
+			// scene.add(car);
 		});
 
 		// Rings
@@ -160,22 +184,51 @@ export default function App() {
 			ring.castShadow = true;
 			ring.receiveShadow = true;
 
-			const z = (7 - i) * ringsGap;
-			const dist = Math.abs(z);
-
-			ring.position.z = z;
-			ring.scale.setScalar(1 - dist * 0.04);
-
-			if (i % 2 === 1) {
-				ring.material.emissive = new Color(6, 0.15, 0.7).multiplyScalar(0.5);
-			} else {
-				ring.material.emissive = new Color(0.1, 0.7, 3).multiplyScalar(0.5);
-			}
-
 			rings.add(ring);
 		}
 
 		scene.add(rings);
+
+		// Boxes
+
+		const boxesCount = 100;
+
+		const boxes = new Group();
+		const boxGeometry = new BoxGeometry(1, 1, 1);
+		const boxMaterial = new MeshStandardMaterial({ envMapIntensity: 0.15 });
+		const boxColorRed = new Color(0.4, 0.1, 0.1);
+		const boxColorBlue = new Color(0.05, 0.15, 0.4);
+
+		function initialBoxPosition() {
+			const v = new Vector3(
+				Math.random() * 2 - 1,
+				Math.random() * 2.5 + 0.1,
+				(Math.random() * 2 - 1) * 15
+			);
+
+			if (v.x < 0) v.x -= 1.75;
+			if (v.x > 0) v.x += 1.75;
+
+			return v;
+		}
+
+		for (let i = 0; i < boxesCount; i++) {
+			const box = new Mesh(boxGeometry, boxMaterial.clone());
+
+			box.position.copy(initialBoxPosition());
+			box.scale.setScalar(Math.pow(Math.random(), 2.0) * 0.5 + 0.05);
+			box.userData.speed = Math.random();
+
+			if (i % 2 === 1) {
+				box.material.color = boxColorRed;
+			} else {
+				box.material.color = boxColorBlue;
+			}
+
+			boxes.add(box);
+		}
+
+		scene.add(boxes);
 
 		/**
 		 * Light
@@ -186,6 +239,7 @@ export default function App() {
 		spotLight1.penumbra = 0.5;
 		spotLight1.position.set(5, 5, 0);
 		spotLight1.castShadow = true;
+		spotLight1.shadow.normalBias = 0.01;
 		scene.add(spotLight1);
 
 		const spotLight2 = new SpotLight(new Color(0.14, 0.5, 1.0), 230);
@@ -193,6 +247,7 @@ export default function App() {
 		spotLight2.penumbra = 0.5;
 		spotLight2.position.set(-5, 5, 0);
 		spotLight2.castShadow = true;
+		spotLight2.shadow.normalBias = 0.01;
 		scene.add(spotLight2);
 
 		/**
@@ -254,11 +309,65 @@ export default function App() {
 		 * Events
 		 */
 
+		function updateRings(time: number) {
+			time *= 0.0004;
+
+			for (let i = 0; i < ringsCount; i++) {
+				const ring = rings.children[i] as Mesh<
+					TorusGeometry,
+					MeshStandardMaterial
+				>;
+
+				// mul(2) is important
+				const z = (7 - i) * ringsGap - (time % 3.5) * 2;
+
+				// [-7, 7]
+				const distance = Math.abs(z);
+
+				ring.position.z = z;
+				ring.scale.setScalar(1 - distance * 0.04);
+
+				let colorScale = 1.0;
+
+				if (distance > 2) {
+					colorScale = 1 - (Math.min(distance, 12) - 2) / 10;
+				}
+				colorScale *= 0.5;
+
+				if (i % 2 === 1) {
+					ring.material.emissive = new Color(6, 0.15, 0.7).multiplyScalar(
+						colorScale
+					);
+				} else {
+					ring.material.emissive = new Color(0.1, 0.7, 3).multiplyScalar(
+						colorScale
+					);
+				}
+			}
+		}
+
+		function updateBoxes(time: number) {
+			time *= 0.001;
+
+			for (let i = 0; i < boxesCount; i++) {
+				const box = boxes.children[i];
+
+				box.rotation.x = time * box.userData.speed;
+				box.rotation.y = time * box.userData.speed;
+			}
+		}
+
 		function render(time: number = 0) {
 			requestAnimationFrame(render);
 
 			controls.update(time);
 			stats.update();
+			updateRings(time);
+			updateBoxes(time);
+
+			girdColorTexture.offset.y = -time * 0.001 * 0.68;
+			floorRoughnessTexture.offset.y = -time * 0.001 * 0.128;
+			floorNormalTexture.offset.y = -time * 0.001 * 0.128;
 
 			cubeCamera.update(renderer, scene);
 
