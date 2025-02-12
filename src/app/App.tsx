@@ -24,8 +24,25 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import Stats from 'three/examples/jsm/libs/stats.module';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { reflector, texture, uv } from 'three/src/nodes/TSL';
-import { MeshStandardNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
+import { dof } from 'three/examples/jsm/tsl/display/DepthOfFieldNode.js';
+import { fxaa } from 'three/examples/jsm/tsl/display/FXAANode.js';
+import { rgbShift } from 'three/examples/jsm/tsl/display/RGBShiftNode.js';
+import {
+	emissive,
+	mrt,
+	output,
+	pass,
+	reflector,
+	texture,
+	uniform,
+	uv,
+} from 'three/src/nodes/TSL';
+import {
+	MeshStandardNodeMaterial,
+	PostProcessing,
+	WebGPURenderer,
+} from 'three/webgpu';
 import { Pane } from 'tweakpane';
 
 const PUBLIC_PATH = import.meta.env.PROD
@@ -80,6 +97,50 @@ export default function App() {
 		const cubeCamera = new CubeCamera(0.5, 500, cubeEnvironment);
 		cubeCamera.layers.set(ENVIRONMENT_LAYER);
 		scene.add(cubeCamera);
+
+		/**
+		 * Post progressing
+		 */
+
+		const postProgressing = new PostProcessing(renderer);
+
+		const scenePass = pass(scene, camera);
+		scenePass.setMRT(
+			mrt({
+				output,
+				emissive,
+			})
+		);
+		const scenePassViewZ = scenePass.getViewZNode();
+
+		const outputPass = scenePass.getTextureNode();
+		const emissivePass = scenePass.getTextureNode('emissive');
+
+		const bloomPass = bloom(emissivePass, 2.5, 0.5);
+
+		const rgbShiftPass = rgbShift(outputPass);
+		rgbShiftPass.amount.value = 0.001;
+
+		const fxaaPass = fxaa(outputPass);
+
+		const dofUniform = {
+			focus: uniform(500),
+			aperture: uniform(5),
+			maxblur: uniform(0.01),
+		};
+
+		const dofPass = dof(
+			outputPass,
+			scenePassViewZ,
+			dofUniform.focus,
+			dofUniform.aperture.mul(0.00001),
+			dofUniform.maxblur
+		);
+
+		postProgressing.outputNode = rgbShiftPass
+			.add(fxaaPass)
+			.add(bloomPass)
+			.add(dofPass);
 
 		/**
 		 * Loaders
@@ -161,8 +222,7 @@ export default function App() {
 					}
 				}
 			});
-
-			// scene.add(car);
+			scene.add(car);
 		});
 
 		// Rings
@@ -317,6 +377,50 @@ export default function App() {
 				color: { type: 'float' },
 			});
 		}
+		{
+			const bloomPane = pane.addFolder({ title: 'Bloom' });
+			bloomPane.addBinding(bloomPass.strength, 'value', {
+				label: 'strength',
+				min: 0.1,
+				max: 3,
+				step: 0.001,
+			});
+			bloomPane.addBinding(bloomPass.radius, 'value', {
+				label: 'radius',
+				min: 0,
+				max: 2,
+				step: 0.001,
+			});
+		}
+		{
+			const rgbPane = pane.addFolder({ title: 'RBG Shift' });
+			rgbPane.addBinding(rgbShiftPass.amount, 'value', {
+				step: 0.0001,
+				min: 0,
+				max: 0.5,
+			});
+		}
+		{
+			const dofPane = pane.addFolder({ title: 'Depth Of Field' });
+			dofPane.addBinding(dofUniform.focus, 'value', {
+				label: 'focus',
+				min: 10,
+				max: 3000,
+				step: 10,
+			});
+			dofPane.addBinding(dofUniform.aperture, 'value', {
+				label: 'aperture',
+				min: 0,
+				max: 10,
+				step: 0.1,
+			});
+			dofPane.addBinding(dofUniform.maxblur, 'value', {
+				label: 'maxblur',
+				min: 0,
+				max: 0.01,
+				step: 0.001,
+			});
+		}
 
 		/**
 		 * Events
@@ -374,6 +478,17 @@ export default function App() {
 			}
 		}
 
+		function updateCar(time: number) {
+			const car = scene.getObjectByName('Sketchfab_Scene');
+			if (!car) return;
+
+			const group = car.children[0].children[0].children[0];
+			group.children[0].rotation.x += time;
+			group.children[2].rotation.x += time;
+			group.children[4].rotation.x += time;
+			group.children[6].rotation.x += time;
+		}
+
 		let lastTime = 0;
 
 		function render(time: number = 0) {
@@ -386,6 +501,7 @@ export default function App() {
 			stats.update();
 			updateRings(time);
 			updateBoxes(deltaTime);
+			updateCar(deltaTime);
 
 			girdColorTexture.offset.y = -time * 0.001 * 0.68;
 			floorRoughnessTexture.offset.y = -time * 0.001 * 0.128;
@@ -393,7 +509,7 @@ export default function App() {
 
 			cubeCamera.update(renderer, scene);
 
-			renderer.render(scene, camera);
+			postProgressing.render();
 		}
 		render();
 
