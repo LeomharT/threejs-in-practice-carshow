@@ -85,6 +85,7 @@ export default function App() {
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.05;
 		controls.enablePan = false;
+		controls.maxPolarAngle = Math.PI / 2 - 0.1;
 
 		const stats = new Stats();
 		el.append(stats.dom);
@@ -328,6 +329,7 @@ export default function App() {
 		 */
 
 		const axesHelper = new AxesHelper();
+		axesHelper.visible = false;
 		scene.add(axesHelper);
 
 		/**
